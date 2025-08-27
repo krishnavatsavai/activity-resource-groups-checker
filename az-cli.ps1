@@ -68,16 +68,33 @@ foreach ($rg in $resourceGroups) {
     }
     
     try {
-        # Check ARM deployments
+        # Check ARM deployments - Try multiple timestamp fields and formats
         Write-Host "  Checking ARM deployments..." -ForegroundColor Gray
-        $deploymentsJson = az deployment group list --resource-group $rg --query "[?timestamp>='$startDate']" 2>$null
-        $deployments = if ($deploymentsJson) { $deploymentsJson | ConvertFrom-Json } else { @() }
-        $deploymentCount = if ($deployments) { $deployments.Count } else { 0 }
+        
+        # Try different timestamp queries
+        $deploymentsJson1 = az deployment group list --resource-group $rg --query "[?timestamp>='$startDate']" 2>$null
+        $deploymentsJson2 = az deployment group list --resource-group $rg --query "[?properties.timestamp>='$startDate']" 2>$null
+        
+        # Also try with a much earlier date to test
+        $earlierDate = (Get-Date).AddDays(-60).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+        $deploymentsJson3 = az deployment group list --resource-group $rg --query "[?properties.timestamp>='$earlierDate']" 2>$null
+        
+        $deployments1 = if ($deploymentsJson1) { $deploymentsJson1 | ConvertFrom-Json } else { @() }
+        $deployments2 = if ($deploymentsJson2) { $deploymentsJson2 | ConvertFrom-Json } else { @() }
+        $deployments3 = if ($deploymentsJson3) { $deploymentsJson3 | ConvertFrom-Json } else { @() }
+        
+        $deploymentCount1 = if ($deployments1) { $deployments1.Count } else { 0 }
+        $deploymentCount2 = if ($deployments2) { $deployments2.Count } else { 0 }
+        $deploymentCount3 = if ($deployments3) { $deployments3.Count } else { 0 }
+        
+        # Use whichever method finds the most recent deployments
+        $deploymentCount = [Math]::Max([Math]::Max($deploymentCount1, $deploymentCount2), $deploymentCount3)
         
         # Debug: Show what deployments exist (without date filter)
         $allDeployments = az deployment group list --resource-group $rg 2>$null | ConvertFrom-Json
         $allDeploymentCount = if ($allDeployments) { $allDeployments.Count } else { 0 }
-        Write-Host "    Debug: Found $allDeploymentCount total deployments, $deploymentCount in date range" -ForegroundColor DarkGray
+        Write-Host "    Debug: Found $allDeploymentCount total deployments" -ForegroundColor DarkGray
+        Write-Host "    Debug: timestamp>=startDate: $deploymentCount1, properties.timestamp>=startDate: $deploymentCount2, 60-day range: $deploymentCount3" -ForegroundColor DarkGray
         
         # Check activity logs (Portal activities, manual changes, etc.)
         Write-Host "  Checking activity logs..." -ForegroundColor Gray
