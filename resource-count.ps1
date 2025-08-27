@@ -39,19 +39,31 @@ foreach ($rg in $resourceGroups) {
         continue
     }
     
-    # Count resources
-    $resourceCount = (az resource list --resource-group $rg --query "length(@)" --output tsv 2>$null)
-    if (-not $resourceCount) { $resourceCount = 0 }
+    # Count resources - handle errors properly
+    $resourceCountOutput = az resource list --resource-group $rg --query "length(@)" --output tsv 2>$null
     
+    # Parse the output safely
+    $resourceCount = 0
+    if ($resourceCountOutput -and $resourceCountOutput -match '^\d+$') {
+        $resourceCount = [int]$resourceCountOutput
+    } else {
+        # Fallback: count resources manually if query fails
+        $resourcesJson = az resource list --resource-group $rg 2>$null
+        if ($resourcesJson) {
+            $resources = $resourcesJson | ConvertFrom-Json
+            $resourceCount = if ($resources) { $resources.Count } else { 0 }
+        }
+    }
+
     $totalResources += $resourceCount
     if ($resourceCount -eq 0) { $emptyCount++ }
-    
+
     $results += [PSCustomObject]@{ 
         ResourceGroup = $rg
-        ResourceCount = [int]$resourceCount
+        ResourceCount = $resourceCount
         Status = "Found" 
     }
-    
+
     # Display result
     if ($resourceCount -eq 0) {
         Write-Host "$rg : EMPTY (0 resources)" -ForegroundColor Red
@@ -69,6 +81,7 @@ Write-Host "Resource Groups with Resources: $(($resourceGroups.Count - $emptyCou
 Write-Host "Total Resources: $totalResources"
 
 # Export to CSV
+$OutputFile = "resource-count-results.csv"
 $results | Export-Csv -Path $OutputFile -NoTypeInformation
 Write-Host ""
 Write-Host "Results saved to: $OutputFile" -ForegroundColor Green
