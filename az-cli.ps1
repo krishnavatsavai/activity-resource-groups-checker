@@ -32,9 +32,9 @@ try {
 Write-Host "=== Azure Resource Group Activity Checker ===" -ForegroundColor Green
 Write-Host "Checking for activity in the last $Days days" -ForegroundColor Yellow
 
-# Calculate date range (Azure CLI uses UTC)
-$startDate = (Get-Date).AddDays(-$Days).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
-Write-Host "Looking for activity since: $startDate" -ForegroundColor Yellow
+# Calculate date range (Azure CLI uses UTC) - Add extra buffer for timezone issues
+$startDate = (Get-Date).AddDays(-$Days).AddHours(-24).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+Write-Host "Looking for activity since: $startDate (with 24hr buffer for timezone)" -ForegroundColor Yellow
 
 # Read resource groups
 if (Test-Path $ResourceGroupListFile) {
@@ -73,6 +73,11 @@ foreach ($rg in $resourceGroups) {
         $deploymentsJson = az deployment group list --resource-group $rg --query "[?timestamp>='$startDate']" 2>$null
         $deployments = if ($deploymentsJson) { $deploymentsJson | ConvertFrom-Json } else { @() }
         $deploymentCount = if ($deployments) { $deployments.Count } else { 0 }
+        
+        # Debug: Show what deployments exist (without date filter)
+        $allDeployments = az deployment group list --resource-group $rg 2>$null | ConvertFrom-Json
+        $allDeploymentCount = if ($allDeployments) { $allDeployments.Count } else { 0 }
+        Write-Host "    Debug: Found $allDeploymentCount total deployments, $deploymentCount in date range" -ForegroundColor DarkGray
         
         # Check activity logs (Portal activities, manual changes, etc.)
         Write-Host "  Checking activity logs..." -ForegroundColor Gray
