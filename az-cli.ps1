@@ -61,6 +61,8 @@ foreach ($rg in $resourceGroups) {
             ResourceGroup = $rg
             DeploymentCount = 0
             ActivityCount = 0
+            ResourceCount = 0
+            IsEmpty = $true
             Status = "Not Found"
             HasActivity = $false
         }
@@ -96,6 +98,8 @@ foreach ($rg in $resourceGroups) {
         $totalActivity = $deploymentCount + $activityCount
         $totalDeployments += $deploymentCount
         $totalActivities += $activityCount
+        $totalResources += $resourceCount
+        if ($isEmpty) { $emptyResourceGroups += 1 }
         
         $results += [PSCustomObject]@{
             ResourceGroup = $rg
@@ -118,6 +122,8 @@ foreach ($rg in $resourceGroups) {
             ResourceGroup = $rg
             DeploymentCount = 0
             ActivityCount = 0
+            ResourceCount = 0
+            IsEmpty = $true
             Status = "Error: $($_.Exception.Message)"
             HasActivity = $false
         }
@@ -130,6 +136,8 @@ Write-Host "=== SUMMARY ===" -ForegroundColor Green
 Write-Host "Total Resource Groups Checked: $($resourceGroups.Count)"
 Write-Host "Total ARM Deployments Found: $totalDeployments"
 Write-Host "Total Activity Log Entries: $totalActivities"
+Write-Host "Total Resources Across All RGs: $totalResources"
+Write-Host "Empty Resource Groups: $emptyResourceGroups"
 Write-Host "Resource Groups with Activity: $(($results | Where-Object { $_.HasActivity }).Count)"
 
 # Export results
@@ -139,16 +147,28 @@ Write-Host "Summary report exported to: $OutputFile" -ForegroundColor Green
 
 # Show active resource groups
 $activeRGs = $results | Where-Object { $_.HasActivity }
+$emptyRGs = $results | Where-Object { $_.IsEmpty }
+
 if ($activeRGs.Count -gt 0) {
     Write-Host ""
     Write-Host "=== RESOURCE GROUPS WITH RECENT ACTIVITY ===" -ForegroundColor Yellow
     foreach ($rg in $activeRGs) {
         $total = $rg.DeploymentCount + $rg.ActivityCount
-        Write-Host "${rg.ResourceGroup}: $($rg.DeploymentCount) deployments, $($rg.ActivityCount) activities (Total: $total)" -ForegroundColor Cyan
+        $emptyStatus = if ($rg.IsEmpty) { " [EMPTY]" } else { "" }
+        Write-Host "${rg.ResourceGroup}: $($rg.DeploymentCount) deployments, $($rg.ActivityCount) activities, $($rg.ResourceCount) resources$emptyStatus" -ForegroundColor Cyan
     }
 } else {
     Write-Host ""
     Write-Host "No recent activity found in any resource groups." -ForegroundColor Yellow
+}
+
+if ($emptyRGs.Count -gt 0) {
+    Write-Host ""
+    Write-Host "=== EMPTY RESOURCE GROUPS ===" -ForegroundColor Red
+    foreach ($rg in $emptyRGs) {
+        $activityStatus = if ($rg.HasActivity) { " (but has recent activity)" } else { " (no recent activity)" }
+        Write-Host "$($rg.ResourceGroup): 0 resources$activityStatus" -ForegroundColor DarkRed
+    }
 }
 
 Write-Host ""
