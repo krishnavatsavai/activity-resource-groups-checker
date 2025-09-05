@@ -1,0 +1,1 @@
+az storage account list --query "[?networkRuleSet.defaultAction=='Allow'].{Name:name, ResourceGroup:resourceGroup, Location:location}" --output table
